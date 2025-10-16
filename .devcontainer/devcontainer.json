@@ -18,15 +18,27 @@
 	"portsAttributes": {
 		"8888": {
 			"label": "Jupyter Lab",
-			"onAutoForward": "openBrowser"
+			"onAutoForward": "notify"
 		},
 		"8889": {
 			"label": "Jupyter Notebook (alt)",
-			"onAutoForward": "openBrowser"
+			"onAutoForward": "notify"
 		},
 		"8890": {
 			"label": "Alternative",
-			"onAutoForward": "notify"
+			"onAutoForward": "ignore"
+		},
+		"5974": {
+			"label": "Ruff LSP",
+			"onAutoForward": "ignore"
+		},
+		"5342": {
+			"label": "Ruff",
+			"onAutoForward": "ignore"
+		},
+		"3038": {
+			"label": "Ruff",
+			"onAutoForward": "ignore"
 		}
 	},
 	
@@ -69,13 +81,14 @@
 				"files.watcherExclude": {
 					"**/.venv/**": true,
 					"**/.*": true
-				}
+				},
+				"python.analysis.typeCheckingMode": "standard"
 			}
 		}
 	},
 	
 	// Run commands after container starts
-	"postStartCommand": "poetry install && poetry run efds lab",
+	"postStartCommand": "poetry install",
 	
 	// Remotes for connecting to container
 	"remoteUser": "vscode"
