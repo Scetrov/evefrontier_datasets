@@ -1,0 +1,53 @@
+[tool.poetry]
+name = "evefrontier-datasets"
+version = "0.1.0"
+description = "Eve Frontier datasets project with Jupyter Notebook support"
+authors = ["Scetrov <git@scetrov.live>"]
+license = "MIT"
+readme = "README.md"
+packages = [{include = "evefrontier_datasets"}]
+
+[tool.poetry.dependencies]
+python = "^3.12"
+jupyter = "^1.0.0"
+jupyterlab = "^4.0.0"
+notebook = "^7.0.0"
+ipython = "^8.0.0"
+pandas = "^2.0.0"
+numpy = "^1.24.0"
+matplotlib = "^3.7.0"
+seaborn = "^0.13.0"
+plotly = "^5.0.0"
+polars = "^0.20.0"
+requests = "^2.31.0"
+python-dotenv = "^1.0.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.4.0"
+black = "^23.0.0"
+flake8 = "^6.1.0"
+mypy = "^1.5.0"
+isort = "^5.12.0"
+pylint = "^3.0.0"
+
+[tool.poetry.scripts]
+efds = "evefrontier_datasets.cli:main"
+
+[tool.black]
+line-length = 100
+target-version = ['py312']
+
+[tool.isort]
+profile = "black"
+line_length = 100
+python_version = "312"
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

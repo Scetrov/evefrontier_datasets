@@ -1,0 +1,82 @@
+{
+	"name": "EVE Frontier Datasets",
+	"build": {
+		"dockerfile": "Dockerfile",
+		"context": "."
+	},
+	
+	// Features to add to the container
+	"features": {
+		"ghcr.io/devcontainers/features/git:1": {
+			"ppa": true,
+			"version": "latest"
+		}
+	},
+	
+	// Forward ports for Jupyter Lab (8888) and alternative ports
+	"forwardPorts": [8888, 8889, 8890],
+	"portsAttributes": {
+		"8888": {
+			"label": "Jupyter Lab",
+			"onAutoForward": "openBrowser"
+		},
+		"8889": {
+			"label": "Jupyter Notebook (alt)",
+			"onAutoForward": "openBrowser"
+		},
+		"8890": {
+			"label": "Alternative",
+			"onAutoForward": "notify"
+		}
+	},
+	
+	// Configure container environment
+	"containerEnv": {
+		"JUPYTER_ENABLE_LAB": "yes"
+	},
+	
+	// Mount the workspace
+	"workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind",
+	"workspaceFolder": "/workspace",
+	
+	// Customize VS Code settings
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"ms-python.python",
+				"ms-python.vscode-pylance",
+				"ms-toolsai.jupyter",
+				"ms-toolsai.jupyter-keymap",
+				"ms-toolsai.jupyter-renderers",
+				"charliermarsh.ruff",
+				"ms-python.black-formatter"
+			],
+			"settings": {
+				"python.defaultInterpreterPath": "/workspace/.venv/bin/python",
+				"python.linting.enabled": true,
+				"python.linting.pylintEnabled": false,
+				"python.linting.flake8Enabled": true,
+				"python.formatting.provider": "black",
+				"python.formatting.blackArgs": ["--line-length=100"],
+				"[python]": {
+					"editor.formatOnSave": true,
+					"editor.defaultFormatter": "ms-python.python",
+					"editor.codeActionsOnSave": {
+						"source.organizeImports": "explicit"
+					}
+				},
+				"editor.rulers": [100],
+				"files.watcherExclude": {
+					"**/.venv/**": true,
+					"**/.*": true
+				}
+			}
+		}
+	},
+	
+	// Run commands after container starts
+	"postStartCommand": "poetry install && poetry run efds lab",
+	
+	// Remotes for connecting to container
+	"remoteUser": "vscode"
+}
