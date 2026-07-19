@@ -1,0 +1,9 @@
+# Repository owner verified as an administrator at the time this file was added.
+* @Scetrov
+
+# Security-sensitive configuration and documentation.
+/.github/ @Scetrov
+/.env.example @Scetrov
+/pyproject.toml @Scetrov
+/poetry.lock @Scetrov
+/docs/ @Scetrov
