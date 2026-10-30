@@ -1,227 +1,82 @@
-# EVE Frontier Datasets
+# EVE Frontier item extractor
 
-Supplying EVE Frontier Datasets for analysis and visualization using Jupyter Notebooks.
+A standalone, offline Go CLI for the local **Stillness** installation. Exports published item/type IDs, English names and descriptions, classification, base client metadata, and the best matching locally available original icons. No Python, game DLL loading, runtime network access, or external SQLite executable is required.
 
-## Features
-
-- 🐍 **Python 3.12** - Modern Python version with latest features
-- 📓 **Jupyter Lab & Notebook** - Interactive analysis and visualization
-- 📦 **Poetry** - Dependency management and virtual environments
-- 🎯 **CLI Tool** - Convenient command-line interface for common tasks
-- 📊 **Data Science Stack** - Pre-configured with pandas, numpy, matplotlib, seaborn, and plotly
-- 🔧 **Development Tools** - pytest, black, flake8, mypy, and isort included
-
-## Prerequisites
-
-- **Python 3.12+** - Download from [python.org](https://www.python.org/)
-- **Poetry** - Install from [python-poetry.org](https://python-poetry.org/docs/#installing-with-pipx) (recommended via pipx)
-
-### Create a Virtual Environment
-
-```sh
-python -m venv .venv
-```
-
-### Installing Poetry
-
-```sh
-# Using pipx (recommended)
-pipx install poetry
-
-# Or using pip
-pip install poetry
-```
-
-## Quick Start
-
-### 1. Install Dependencies
-
-```sh
-poetry install
-```
-
-This will:
-
-- Create a virtual environment
-- Install all dependencies (Jupyter, pandas, numpy, matplotlib, etc.)
-- Install development dependencies
-
-### 2. Start Jupyter Lab
+## Run (PowerShell)
 
 ```powershell
-poetry run efds lab
+.\frontier-extract.exe -game 'C:\CCP\EVE Frontier' -out 'C:\source\eve-frontier-data-extractor\my-export'
 ```
 
-### 3. Create a New Notebook
+The output directory **must not already exist**, its parent must exist, and it must be outside the game installation. Extraction stages output in that parent, then renames the completed directory into place. Use a new directory for each run.
+
+Outputs:
+
+- `static_data.db`: SQLite database with `Types`, `Groups`, and `Categories`. Types contain published records, base mass, volume, capacity, portion size, base price, optional market group, descriptions and icon references. Group and category tables contain all decoded definitions and English names. `PRAGMA user_version` is 1.
+- `items.json`: sorted catalog with the same type metadata, localized group/category names, icon resource URI, image dimensions, availability, and per-item issues.
+- `items.csv`: the same item fields in spreadsheet-friendly form. Formula-like text is prefixed with an apostrophe; JSON and SQLite retain exact text.
+- `icons/<typeID>.<original extension>`: original image bytes, without resizing or conversion. Multiple items can share the same source icon.
+- `report.json`: totals, missing localization/classification/icon counts, and the client MD5 checksums of resources read.
+
+Base values are client type metadata, **not fitted ship statistics**. No ship-stat CSV or spatial data is produced. A published flag does not establish current availability. Nullable SQLite values represent absent optional data; CSV represents missing optional text and IDs as empty fields.
+
+An absent icon remains an item with `icon_status: "missing"`, an empty `icon` path, and zero dimensions. Unreadable/corrupt image candidates are recorded under `issues`; another valid candidate can still be selected. Missing or invalid core metadata fails extraction without publishing output.
+
+## Results from the inspected installation
+
+| Result | Item count |
+|---|---:|
+| All client type records | 32,925 |
+| Published types exported | 796 |
+| Resolved English names | 796 |
+| Items with an original icon | 785 |
+| Items with a 512×512 icon | 265 |
+| Items without a matching local icon | 11 |
+
+**High-resolution artwork is not available for every item in these indexed files.** Of the exported icons, 504 are 64×64; the remainder are 512×512 or other native sizes. The extractor does not upscale, render 3D models, download artwork, or pretend a small icon is high resolution. “Published” is the client's flag, not a guarantee that an item is currently obtainable; some legacy/internal types carry that flag.
+
+The included `output/` contains this extraction. Future installations can produce different totals.
+
+## Build and test
+
+Requires Go 1.24 or newer (uses `os.Root` for confined resource reads).
 
 ```powershell
-poetry run efds notebook new my_analysis
+go build -trimpath -ldflags='-s -w' -o frontier-extract.exe .
+go test ./...
+go vet ./...
+
+# Optional read-only real-installation test:
+$env:FRONTIER_GAME_TEST = 'C:\CCP\EVE Frontier'
+go test -run TestInstalledGame -v
+Remove-Item Env:FRONTIER_GAME_TEST
+
+# Optional bounded parser fuzzing:
+go test -run='^$' -fuzz=FuzzLocalization -fuzztime=10s -parallel=2
+go test -run='^$' -fuzz=FuzzFSD -fuzztime=10s -parallel=2
 ```
 
-This creates a new notebook at `notebooks/my_analysis.ipynb` with starter code.
+The pure-Go `modernc.org/sqlite` driver is pinned in `go.mod` and `go.sum`; v1.46.1 is the newest release compatible with the project's Go 1.24 minimum (the current latest requires Go 1.26). Building downloads dependencies; extraction itself is offline. Tests use synthetic fixtures rather than checking proprietary game binaries into source.
 
-## CLI Commands
+## How it works
 
-The project includes a custom CLI tool (`efds`) for common tasks:
+1. Read `index_stillness.txt` and follow its `app:/resfileindex.txt` and `app:/resfileindex_Windows.txt` entries into `ResFiles`. Never scan Utopia or mix its assets into Stillness.
+2. Read the indexed `types.fsdbinary`, `groups.fsdbinary`, `categories.fsdbinary`, `iconids.fsdbinary`, `graphicids.fsdbinary`, and `localization_fsd_en-us.pickle` resources.
+3. Decode known cFSD schemas directly in Go. Retain only types with a present, true `published` field; resolve type, group and category localization message IDs.
+4. Find icons through explicit `iconID` mappings and `graphicID` icon folders. Recognize same-path size suffix variants, inspect actual image dimensions, and select the largest pixel area. Equal-area candidates are selected deterministically by resource URI.
+5. Copy selected original images into the external output directory and write catalogs/report.
 
-```powershell
-# Start Jupyter Lab
-poetry run efds lab
+PNG and JPEG dimensions use Go's standard image header decoders. DDS files can be copied unchanged after header validation, not converted to PNG. A DDS-capable viewer is required if a future matching asset uses that format.
 
-# Start Jupyter Notebook
-poetry run efds notebook
+### Safety and limitations
 
-# Create a new notebook
-poetry run efds notebook new <name>
+- The game installation is only opened for reading. Game executables, compiled Python loaders, and Python pickle code are **never executed**. Ordinary filesystem reads can update access-time metadata; this is not a forensic acquisition tool.
+- The localization parser accepts only the observed primitive protocol-4 container operations. Executable pickle operations are rejected. It discards unused localization metadata.
+- Known 24-byte FSD schema fingerprints are pinned in `fsd.go`; an unknown fingerprint fails closed. A CCP schema change requires reviewing the new layout and updating code/tests.
+- Resource paths must match the client's hashed-cache naming pattern. `os.Root` confines resource access to the installation. Reads are size-limited (64 MiB per resource), and parsers validate bounds/counts and impose resource limits.
+- MD5 matches the client index and detects accidental corruption or stale files; it does **not** authenticate CCP content against malicious modification of both index and data.
+- Output is never placed in the installation, and existing output is never intentionally overwritten. Do not move or replace installation/output-parent directories while extraction is running.
+- Cached resources must already be installed. There is no downloader, game-client fallback, runtime Python dependency, or external image service.
+- Game data and artwork remain subject to CCP's applicable terms. The Go code is independent of the game runtime; do not assume the extracted assets are licensed for redistribution.
 
-# List all notebooks
-poetry run efds notebook list
-
-# Install dependencies
-poetry run efds install
-
-# Update dependencies
-poetry run efds update
-
-# Display project information
-poetry run efds info
-```
-
-### Examples
-
-```powershell
-# Create and work on a new analysis
-poetry run efds notebook new datasets_analysis
-poetry run efds lab
-
-# List all your notebooks
-poetry run efds notebook list
-
-# Update all dependencies to latest versions
-poetry run efds update
-```
-
-## Project Structure
-
-```
-evefrontier_datasets/
-├── README.md                    # This file
-├── LICENSE                      # MIT License
-├── pyproject.toml              # Poetry configuration
-├── notebooks/                  # Jupyter notebooks
-│   └── .gitkeep
-└── evefrontier_datasets/       # Python package
-    ├── __init__.py
-    └── cli.py                  # CLI implementation
-```
-
-## Available Packages
-
-### Data Science & Analysis
-
-- **pandas** - Data manipulation and analysis
-- **numpy** - Numerical computing
-- **polars** - Fast dataframe library
-- **plotly** - Interactive visualizations
-
-### Visualization
-
-- **matplotlib** - Static, animated, and interactive plotting
-- **seaborn** - Statistical data visualization
-
-### Development
-
-- **pytest** - Testing framework
-- **black** - Code formatter
-- **flake8** - Linting
-- **mypy** - Static type checker
-- **isort** - Import sorting
-
-## Development
-
-### Code Formatting
-
-```powershell
-poetry run black evefrontier_datasets/
-poetry run isort evefrontier_datasets/
-```
-
-### Linting
-
-```powershell
-poetry run flake8 evefrontier_datasets/
-poetry run mypy evefrontier_datasets/
-```
-
-### Running Tests
-
-```powershell
-poetry run pytest
-```
-
-## Adding New Dependencies
-
-To add a new package:
-
-```powershell
-poetry add <package-name>
-```
-
-For development dependencies only:
-
-```powershell
-poetry add --group dev <package-name>
-```
-
-## Updating Dependencies
-
-```powershell
-poetry update
-```
-
-Or use the CLI:
-
-```powershell
-poetry run efds update
-```
-
-## Tips for Working with Notebooks
-
-1. **Keep notebooks organized** - Use the `notebooks/` directory
-2. **Use the CLI** - Create notebooks with `poetry run efds notebook new <name>`
-3. **Version control** - Notebooks are tracked in git by default
-4. **Restart kernels** - If you modify code, restart the kernel for changes to take effect
-
-## Troubleshooting
-
-### "Poetry not found"
-
-Make sure Poetry is installed and in your PATH:
-
-```powershell
-poetry --version
-```
-
-### "Jupyter not found"
-
-Run `poetry install` to ensure all dependencies are installed:
-
-```powershell
-poetry install
-```
-
-### Virtual environment issues
-
-To activate the Poetry virtual environment directly:
-
-```powershell
-poetry shell
-```
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Author
-
-Scetrov
+See [REVIEW.md](REVIEW.md) for format observations and verification evidence.
